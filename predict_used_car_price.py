@@ -3,14 +3,15 @@ import os
 import sys
 import pandas as pd
 import numpy as np
-import pyspark.pandas as ps
 from pyspark import SparkConf, SparkContext
 from pyspark.sql import SQLContext
 from pyspark.ml.regression import LinearRegression
-from sklearn.model_selection import train_test_split 
 from sklearn.preprocessing import StandardScaler
 from pyspark.ml.feature import VectorAssembler
-from pyspark.ml.evaluation import RegressionEvaluator                     
+from pyspark.ml.evaluation import RegressionEvaluator  
+
+import matplotlib.pyplot as plt 
+import seaborn as sns                   
 
 __author__ = 'Jacob Hajjar'
 __email__ = 'hajjarj@csu.fullerton.edu'
@@ -20,37 +21,24 @@ __maintainer__ = 'jacobhajjar'
 def load_process_data():
     '''load the data, process it for use in ml, return x and y dataframe'''
     df = pd.read_csv("used_cars_labeled.csv")
-    cur_make = "Toyota"
-    toyota_df = df[df['make'] == cur_make]
-    #perform any preprocessing to fix t/f values and clear blank entries
-    #y_data = toyota_df['price']
-    #x_data =  toyota_df.drop(['make', 'price'], axis=1)
-    #x_data =  toyota_df[['year','model','drivetrain','fuel_type','transmission','mileage','in_accident','1_owner','personal_used']]
-    #x_data =  toyota_df[['year','model','mileage','in_accident','1_owner','personal_used']]
-    #standardize year and mileage
-    toyota_df  = toyota_df[['year','model','mileage','in_accident','1_owner','personal_used', 'price']]
+    cur_make = "Honda"
+    make_df = df[df['make'] == cur_make]
+    make_df  = make_df[['year','model','mileage','in_accident','1_owner','personal_used', 'price']]
     std = StandardScaler()
-    toyota_df['mileage'] = std.fit_transform(toyota_df['mileage'].to_numpy().reshape(-1, 1))
-    toyota_df['year'] = std.fit_transform(toyota_df['year'].to_numpy().reshape(-1, 1))
+    make_df['mileage'] = std.fit_transform(make_df['mileage'].to_numpy().reshape(-1, 1))
+    make_df['year'] = std.fit_transform(make_df['year'].to_numpy().reshape(-1, 1))
     #convert t/f to bool
-    toyota_df['in_accident'] = toyota_df['in_accident'].astype('int')
-    toyota_df['1_owner'] = toyota_df['1_owner'].astype('int')
-    toyota_df['personal_used'] = toyota_df['1_owner'].astype('int')
+    make_df['in_accident'] = make_df['in_accident'].astype('int')
+    make_df['1_owner'] = make_df['1_owner'].astype('int')
+    make_df['personal_used'] = make_df['1_owner'].astype('int')
     #drop models under 20 entries, then one hot encode
-    model_list = toyota_df['model'].value_counts()
+    model_list = make_df['model'].value_counts()
     for model, count in model_list.items():
         if count < 20:
-            toyota_df = toyota_df[toyota_df['model'] != model]
+            make_df = make_df[make_df['model'] != model]
+    #one hot encode all of the models
+    encoded_make_df = pd.get_dummies(make_df, columns=['model'])
 
-    encoded_make_df = pd.get_dummies(toyota_df, columns=['model'])
-
-    #toyota_df = toyota_df[toyota_df['model'] == 'Corolla']
-    #print(np.unique(toyota_df['drivetrain'].to_numpy().astype("str"), return_counts=True)) 
-    #convert drivetrain to 4 categories, RWD, FWD, 4WD, AWD, and remove unknown, then one hot encode
-
-    #process transmission to 0 for automatic or 1 for manual, or drop
-
-    #remove fuel_type under 20
     return encoded_make_df
 
 def perform_regression(dataset):
@@ -88,14 +76,25 @@ def perform_regression(dataset):
 
     test_result = lr_model.evaluate(test_df)
     print("Root Mean Squared Error (RMSE) on test data = %g" % test_result.rootMeanSquaredError)
+    #plot results to analyze most significant features
+    print(len(lr_model.coefficients))
+    print(len(feature_columns))
+    coefs = pd.DataFrame(lr_model.coefficients, columns=['Coefficients'], index=feature_columns)
+    coefs.plot(kind='barh', figsize=(9, 7))
+    plt.title('Ridge model')
+    plt.axvline(x=0, color='.5')
+    plt.subplots_adjust(left=.3)
+    plt.show()
+
+
 
 
 def main():
     '''the main function'''
     os.environ['PYSPARK_PYTHON'] = sys.executable
     os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable 
-    toyota_df = load_process_data()
-    perform_regression(toyota_df)
+    make_df = load_process_data()
+    perform_regression(make_df)
     
 
 if __name__ == '__main__':
