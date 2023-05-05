@@ -9,7 +9,8 @@ from pyspark.sql import SQLContext
 from pyspark.ml.regression import LinearRegression
 from sklearn.model_selection import train_test_split 
 from sklearn.preprocessing import StandardScaler
-from pyspark.ml.feature import VectorAssembler                     
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.evaluation import RegressionEvaluator                     
 
 __author__ = 'Jacob Hajjar'
 __email__ = 'hajjarj@csu.fullerton.edu'
@@ -55,12 +56,8 @@ def load_process_data():
 def perform_regression(dataset):
     '''load the data and perform linear regression to predict the price and return the model'''
 
-    #ps_x_data = ps.from_pandas(x_data)
-    #ps_y_data = ps.from_pandas(y_data)
-    #ps_data = ps.from_pandas(toyota_df)
-    #x_train, x_test, y_train, y_test = train_test_split(x_data, y_data, test_size=0.33, random_state=42)
     feature_columns = np.array(dataset.columns)
-    #print(feature_columns)
+
     feature_columns = np.delete(feature_columns, np.where(feature_columns == 'price')[0])
     conf = SparkConf().setMaster("local").setAppName("BigDataAnalysis")
     sc = SparkContext(conf = conf)
@@ -78,7 +75,19 @@ def perform_regression(dataset):
     lr_model = lr.fit(train_df)
     print("Coefficients: " + str(lr_model.coefficients))
     print("Intercept: " + str(lr_model.intercept))
-    #convert to pandas on spark dataframe
+
+    trainingSummary = lr_model.summary
+    print("RMSE: %f" % trainingSummary.rootMeanSquaredError)
+    print("r2: %f" % trainingSummary.r2)
+
+    lr_predictions = lr_model.transform(test_df)
+
+    lr_evaluator = RegressionEvaluator(predictionCol="prediction", \
+                 labelCol="price",metricName="r2")
+    print("R Squared (R2) on test data = %g" % lr_evaluator.evaluate(lr_predictions))
+
+    test_result = lr_model.evaluate(test_df)
+    print("Root Mean Squared Error (RMSE) on test data = %g" % test_result.rootMeanSquaredError)
 
 
 def main():
