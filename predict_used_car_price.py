@@ -97,9 +97,7 @@ def load_data_spark(spark):
 
     stringIndexer = StringIndexer(inputCol="model", outputCol="model_index")
     make_df = stringIndexer.fit(make_df).transform(make_df)
-    print(stringIndexer.params)
-    make_df.show()
-    encoder = OneHotEncoder(inputCol="model_index", outputCol='encoded_model')
+    encoder = OneHotEncoder(inputCol="model_index", outputCol='encoded_model', dropLast=False)
     encoded_make_df = encoder.fit(make_df).transform(make_df)
     encoded_make_df.show()
 
@@ -143,14 +141,23 @@ def perform_regression(sqlContext, dataset):
     test_result = lr_model.evaluate(test_df)
     print("Root Mean Squared Error (RMSE) on test data = %g" % test_result.rootMeanSquaredError)
     #plot results to analyze most significant features
-    print(len(lr_model.coefficients))
-    print(len(feature_columns))
+
+    #get the models for the list
+    model_list_df = dataset.select('model', 'model_index', 'encoded_model').distinct()
+    model_list_df = model_list_df.sort("model_index", ascending=True)
+    model_list_df.show(21)
+    model_list = model_list_df.select(model_list_df.model).toPandas()['model'].tolist()
+
+    #add the models to the features 
+    feature_columns.pop()
+    feature_columns.extend(model_list)
+    #create dataframe just for display of features
     coefs = pd.DataFrame(lr_model.coefficients, columns=['Coefficients'], index=feature_columns)
     coefs.plot(kind='barh', figsize=(9, 7))
     plt.title('Ridge model')
     plt.axvline(x=0, color='.5')
     plt.subplots_adjust(left=.3)
-    plt.show()
+    plt.savefig('make_plot.png')
 
 
 def main():
@@ -162,7 +169,8 @@ def main():
     #sqlContext = SQLContext(sc)
 
     #create the spark session
-    spark = SparkSession.builder.master("local").appName("BigDataAnalysis").getOrCreate()
+    #spark = SparkSession.builder.master("local").appName("BigDataAnalysis").getOrCreate()
+    spark = SparkSession.builder.master("yarn").appName("BigDataAnalysis").getOrCreate()
     #enable pyarrow optimizations with spark when converting to and from dataframes
     #spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
     #make_df = load_process_data()
